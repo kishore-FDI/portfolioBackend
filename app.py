@@ -32,7 +32,7 @@ class RAGApplication:
         
         # Load the saved vectorstore if it exists
         if os.path.exists("vectorstore"):
-            self.vectorstore = FAISS.load_local("vectorstore", self.embedder,allow_dangerous_deserialization=True)
+            self.vectorstore = FAISS.load_local("vectorstore", self.embedder)
         else:
             # Fallback to sample texts if no vectorstore exists
             sample_texts = [
