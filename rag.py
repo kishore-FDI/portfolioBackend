@@ -7,6 +7,7 @@ from langchain.schema import Document
 from flask import Flask, request, jsonify
 import os
 from langchain_community.document_loaders import PyPDFLoader
+from prompts import SYSTEM_PROMPT, BACKGROUND_INFO
 
 class Embed4AllWrapper(Embeddings):
     def __init__(self):
@@ -29,23 +30,32 @@ class RAGApplication:
             chunk_overlap=200
         )
         
-        # Load single PDF file
-        loader = PyPDFLoader("documents/temp.pdf")
-        documents = loader.load()
-        
-        # Initialize vectorstore
-        texts = self.text_splitter.split_documents(documents)
-        self.vectorstore = FAISS.from_texts([t.page_content for t in texts], self.embedder)
+        # Load the saved vectorstore if it exists
+        if os.path.exists("vectorstore"):
+            self.vectorstore = FAISS.load_local("vectorstore", self.embedder,allow_dangerous_deserialization=True)
+        else:
+            # Fallback to sample texts if no vectorstore exists
+            sample_texts = [
+                "Machine learning is a subset of artificial intelligence...",
+                "Deep learning is a type of machine learning...",
+                "Natural Language Processing (NLP) is a branch of AI..."
+            ]
+            documents = [Document(page_content=text) for text in sample_texts]
+            texts = self.text_splitter.split_documents(documents)
+            self.vectorstore = FAISS.from_texts([t.page_content for t in texts], self.embedder)
 
     def query(self, question):
         docs = self.vectorstore.similarity_search(question, k=3)
         context = "\n".join([doc.page_content for doc in docs])
         
-        prompt = f"""Use the following context to answer the question. If you cannot answer
-        based on the context alone, say so.
-        
-        Context: {context}
-        
+        prompt = f"""{SYSTEM_PROMPT}
+
+        Additional Context from Documents:
+        {context}
+
+        Background Information:
+        {BACKGROUND_INFO}
+
         Question: {question}"""
         
         response = self.model.generate_content(prompt)

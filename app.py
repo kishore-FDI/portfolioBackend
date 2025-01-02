@@ -1,41 +1,20 @@
-from gpt4all import Embed4All
 import google.generativeai as genai
 from langchain_community.vectorstores import FAISS
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.embeddings.base import Embeddings
-from langchain.schema import Document
+from langchain.embeddings import HuggingFaceEmbeddings
 from flask import Flask, request, jsonify
 import os
-from langchain_community.document_loaders import PyPDFLoader
-
-class Embed4AllWrapper(Embeddings):
-    def __init__(self):
-        self.embedder = Embed4All()
-    
-    def embed_documents(self, texts):
-        return [self.embedder.embed(text) for text in texts]
-    
-    def embed_query(self, text):
-        return self.embedder.embed(text)
 
 class RAGApplication:
     def __init__(self):
-        self.embedder = Embed4AllWrapper()
+        self.embedder = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
         genai.configure(api_key="AIzaSyDD-afERCwfUOml3Msr0KruJ9dJ6O0EKrY")
         self.model = genai.GenerativeModel('gemini-pro')
         
-        self.text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=1000,
-            chunk_overlap=200
-        )
-        
-        # Load single PDF file
-        loader = PyPDFLoader("documents/temp.pdf")
-        documents = loader.load()
-        
-        # Initialize vectorstore
-        texts = self.text_splitter.split_documents(documents)
-        self.vectorstore = FAISS.from_texts([t.page_content for t in texts], self.embedder)
+        # Load the saved vectorstore if it exists
+        if os.path.exists("vectorstore"):
+            self.vectorstore = FAISS.load_local("vectorstore", self.embedder)
+        else:
+            raise Exception("No vectorstore found. Please run create_embeddings.py first.")
 
     def query(self, question):
         docs = self.vectorstore.similarity_search(question, k=3)
