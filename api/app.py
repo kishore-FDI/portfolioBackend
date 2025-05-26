@@ -1,4 +1,4 @@
-from gpt4all import Embed4All
+from sentence_transformers import SentenceTransformer
 import google.generativeai as genai
 from langchain_community.vectorstores import FAISS
 from langchain.text_splitter import RecursiveCharacterTextSplitter
@@ -9,19 +9,19 @@ import os
 from langchain_community.document_loaders import PyPDFLoader
 from prompts import SYSTEM_PROMPT, BACKGROUND_INFO
 
-class Embed4AllWrapper(Embeddings):
+class SentenceTransformerWrapper(Embeddings):
     def __init__(self):
-        self.embedder = Embed4All()
+        self.model = SentenceTransformer('all-MiniLM-L6-v2')
     
     def embed_documents(self, texts):
-        return [self.embedder.embed(text) for text in texts]
+        return self.model.encode(texts).tolist()
     
     def embed_query(self, text):
-        return self.embedder.embed(text)
+        return self.model.encode(text).tolist()
 
 class RAGApplication:
     def __init__(self):
-        self.embedder = Embed4AllWrapper()
+        self.embedder = SentenceTransformerWrapper()
         genai.configure(api_key="AIzaSyDD-afERCwfUOml3Msr0KruJ9dJ6O0EKrY")
         self.model = genai.GenerativeModel('gemini-pro')
         
