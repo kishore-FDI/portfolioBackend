@@ -1,45 +1,48 @@
 from sentence_transformers import SentenceTransformer
-from langchain_community.vectorstores import FAISS
+from langchain_community.vectorstores import Chroma
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.embeddings import HuggingFaceEmbeddings
-from langchain_community.document_loaders import PyPDFLoader
+from langchain.embeddings.base import Embeddings
+from langchain.schema import Document
 import os
+from langchain_community.document_loaders import PyPDFLoader
 
-def create_and_save_embeddings():
-    # Initialize embedder and text splitter
-    embedder = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+class SentenceTransformerWrapper(Embeddings):
+    def __init__(self):
+        self.model = SentenceTransformer('all-MiniLM-L6-v2')
+    
+    def embed_documents(self, texts):
+        return self.model.encode(texts).tolist()
+    
+    def embed_query(self, text):
+        return self.model.encode(text).tolist()
+
+def create_embeddings(pdf_path):
+    # Initialize the embedding model
+    embedder = SentenceTransformerWrapper()
+    
+    # Initialize text splitter
     text_splitter = RecursiveCharacterTextSplitter(
         chunk_size=1000,
         chunk_overlap=200
     )
     
-    # Load all PDFs from documents folder
-    documents = []
-    pdf_dir = "documents"
-    
-    if not os.path.exists(pdf_dir):
-        os.makedirs(pdf_dir)
-        print(f"Created {pdf_dir} directory")
-        return
-    
-    for filename in os.listdir(pdf_dir):
-        if filename.endswith(".pdf"):
-            pdf_path = os.path.join(pdf_dir, filename)
-            loader = PyPDFLoader(pdf_path)
-            documents.extend(loader.load())
-            print(f"Loaded {filename}")
-    
-    if not documents:
-        print("No PDF files found in documents folder")
-        return
-    
-    # Split documents and create embeddings
+    # Load and split the PDF
+    loader = PyPDFLoader(pdf_path)
+    documents = loader.load()
     texts = text_splitter.split_documents(documents)
-    vectorstore = FAISS.from_documents(texts, embedder)
     
-    # Save the vectorstore
-    vectorstore.save_local("vectorstore")
-    print("Embeddings created and saved successfully")
+    # Create and persist the vector store
+    vectorstore = Chroma.from_documents(
+        documents=texts,
+        embedding=embedder,
+        persist_directory="chroma_db"
+    )
+    vectorstore.persist()
+    
+    print(f"Created embeddings for {len(texts)} chunks of text")
+    print("Vector store saved in 'chroma_db' directory")
 
 if __name__ == "__main__":
-    create_and_save_embeddings() 
+    # Replace with your PDF path
+    pdf_path = "documents/resume.pdf"
+    create_embeddings(pdf_path) 

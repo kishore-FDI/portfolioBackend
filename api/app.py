@@ -1,6 +1,6 @@
 from sentence_transformers import SentenceTransformer
 import google.generativeai as genai
-from langchain_community.vectorstores import FAISS
+from langchain_community.vectorstores import Chroma
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.embeddings.base import Embeddings
 from langchain.schema import Document
@@ -25,24 +25,14 @@ class RAGApplication:
         genai.configure(api_key="AIzaSyDD-afERCwfUOml3Msr0KruJ9dJ6O0EKrY")
         self.model = genai.GenerativeModel('gemini-pro')
         
-        self.text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=1000,
-            chunk_overlap=200
-        )
-        
-        # Load the saved vectorstore if it exists
-        if os.path.exists("vectorstore"):
-            self.vectorstore = FAISS.load_local("vectorstore", self.embedder)
+        # Load the saved vectorstore from chroma_db
+        if os.path.exists("chroma_db"):
+            self.vectorstore = Chroma(
+                persist_directory="chroma_db",
+                embedding_function=self.embedder
+            )
         else:
-            # Fallback to sample texts if no vectorstore exists
-            sample_texts = [
-                "Machine learning is a subset of artificial intelligence...",
-                "Deep learning is a type of machine learning...",
-                "Natural Language Processing (NLP) is a branch of AI..."
-            ]
-            documents = [Document(page_content=text) for text in sample_texts]
-            texts = self.text_splitter.split_documents(documents)
-            self.vectorstore = FAISS.from_texts([t.page_content for t in texts], self.embedder)
+            raise Exception("Vector store not found. Please run create_embeddings.py first.")
 
     def query(self, question):
         docs = self.vectorstore.similarity_search(question, k=3)
