@@ -1,4 +1,4 @@
-from sentence_transformers import SentenceTransformer
+import spacy
 from langchain_community.vectorstores import Chroma
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.embeddings.base import Embeddings
@@ -6,19 +6,38 @@ from langchain.schema import Document
 import os
 from langchain_community.document_loaders import PyPDFLoader
 
-class SentenceTransformerWrapper(Embeddings):
+# Initialize model globally to avoid reloading
+nlp = None
+
+def get_model():
+    global nlp
+    if nlp is None:
+        # Load the small English model
+        nlp = spacy.load('en_core_web_sm')
+    return nlp
+
+class SpacyEmbeddings(Embeddings):
     def __init__(self):
-        self.model = SentenceTransformer('all-MiniLM-L6-v2')
+        self.nlp = get_model()
     
     def embed_documents(self, texts):
-        return self.model.encode(texts).tolist()
+        # Process in smaller batches to reduce memory usage
+        batch_size = 32
+        embeddings = []
+        for i in range(0, len(texts), batch_size):
+            batch = texts[i:i + batch_size]
+            docs = list(self.nlp.pipe(batch))
+            batch_embeddings = [doc.vector.tolist() for doc in docs]
+            embeddings.extend(batch_embeddings)
+        return embeddings
     
     def embed_query(self, text):
-        return self.model.encode(text).tolist()
+        doc = self.nlp(text)
+        return doc.vector.tolist()
 
 def create_embeddings(pdf_path):
     # Initialize the embedding model
-    embedder = SentenceTransformerWrapper()
+    embedder = SpacyEmbeddings()
     
     # Initialize text splitter
     text_splitter = RecursiveCharacterTextSplitter(

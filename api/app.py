@@ -1,4 +1,4 @@
-from sentence_transformers import SentenceTransformer
+import spacy
 import google.generativeai as genai
 from langchain_community.vectorstores import Chroma
 from langchain.text_splitter import RecursiveCharacterTextSplitter
@@ -8,21 +8,20 @@ from flask import Flask, request, jsonify
 import os
 from langchain_community.document_loaders import PyPDFLoader
 from prompts import SYSTEM_PROMPT, BACKGROUND_INFO
-import torch
 
 # Initialize model globally to avoid reloading
-model = None
+nlp = None
 
 def get_model():
-    global model
-    if model is None:
-        # Use CPU for inference to reduce memory usage
-        model = SentenceTransformer('all-MiniLM-L6-v2', device='cpu')
-    return model
+    global nlp
+    if nlp is None:
+        # Load the small English model
+        nlp = spacy.load('en_core_web_sm')
+    return nlp
 
-class SentenceTransformerWrapper(Embeddings):
+class SpacyEmbeddings(Embeddings):
     def __init__(self):
-        self.model = get_model()
+        self.nlp = get_model()
     
     def embed_documents(self, texts):
         # Process in smaller batches to reduce memory usage
@@ -30,16 +29,18 @@ class SentenceTransformerWrapper(Embeddings):
         embeddings = []
         for i in range(0, len(texts), batch_size):
             batch = texts[i:i + batch_size]
-            batch_embeddings = self.model.encode(batch, convert_to_tensor=False)
-            embeddings.extend(batch_embeddings.tolist())
+            docs = list(self.nlp.pipe(batch))
+            batch_embeddings = [doc.vector.tolist() for doc in docs]
+            embeddings.extend(batch_embeddings)
         return embeddings
     
     def embed_query(self, text):
-        return self.model.encode(text, convert_to_tensor=False).tolist()
+        doc = self.nlp(text)
+        return doc.vector.tolist()
 
 class RAGApplication:
     def __init__(self):
-        self.embedder = SentenceTransformerWrapper()
+        self.embedder = SpacyEmbeddings()
         genai.configure(api_key="AIzaSyDD-afERCwfUOml3Msr0KruJ9dJ6O0EKrY")
         self.model = genai.GenerativeModel('gemini-pro')
         
