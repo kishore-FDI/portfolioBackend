@@ -8,16 +8,34 @@ from flask import Flask, request, jsonify
 import os
 from langchain_community.document_loaders import PyPDFLoader
 from prompts import SYSTEM_PROMPT, BACKGROUND_INFO
+import torch
+
+# Initialize model globally to avoid reloading
+model = None
+
+def get_model():
+    global model
+    if model is None:
+        # Use CPU for inference to reduce memory usage
+        model = SentenceTransformer('all-MiniLM-L6-v2', device='cpu')
+    return model
 
 class SentenceTransformerWrapper(Embeddings):
     def __init__(self):
-        self.model = SentenceTransformer('all-MiniLM-L6-v2')
+        self.model = get_model()
     
     def embed_documents(self, texts):
-        return self.model.encode(texts).tolist()
+        # Process in smaller batches to reduce memory usage
+        batch_size = 32
+        embeddings = []
+        for i in range(0, len(texts), batch_size):
+            batch = texts[i:i + batch_size]
+            batch_embeddings = self.model.encode(batch, convert_to_tensor=False)
+            embeddings.extend(batch_embeddings.tolist())
+        return embeddings
     
     def embed_query(self, text):
-        return self.model.encode(text).tolist()
+        return self.model.encode(text, convert_to_tensor=False).tolist()
 
 class RAGApplication:
     def __init__(self):
